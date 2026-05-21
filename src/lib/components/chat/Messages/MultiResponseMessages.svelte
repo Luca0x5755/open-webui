@@ -331,6 +331,9 @@
 									{compactPreview}
 									{topPadding}
 									{onInsertToNote}
+									on:openSourcePanel={(e) => {
+										dispatch('openSourcePanel', e.detail);
+									}}
 								/>
 							{/if}
 						{/key}
@@ -395,6 +398,9 @@
 										{editCodeBlock}
 										{topPadding}
 										{onInsertToNote}
+										on:openSourcePanel={(e) => {
+											dispatch('openSourcePanel', e.detail);
+										}}
 									/>
 								{/if}
 							{/key}

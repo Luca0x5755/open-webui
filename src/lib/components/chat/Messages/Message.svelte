@@ -112,6 +112,9 @@
 				{compactPreview}
 				{editCodeBlock}
 				{topPadding}
+				on:openSourcePanel={(e) => {
+					dispatch('openSourcePanel', e.detail);
+				}}
 			/>
 		{:else}
 			{#key messageId}
@@ -141,6 +144,9 @@
 					{editCodeBlock}
 					{topPadding}
 					{onInsertToNote}
+					on:openSourcePanel={(e) => {
+						dispatch('openSourcePanel', e.detail);
+					}}
 				/>
 			{/key}
 		{/if}
