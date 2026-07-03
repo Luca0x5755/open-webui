@@ -47,3 +47,7 @@
 # Misc
 *.env text eol=lf
 *.lock text eol=lf
+
+# Fork 維護文件：只在 main 維護；rebase 時一律保留 parent(→main) 版本，避免衝突。
+# 需一次性啟用驅動：git config merge.ours.driver true
+docs/fork維護紀錄.md merge=ours
