@@ -169,6 +169,11 @@ async def create_session_response(
         expires_delta=expires_delta,
     )
 
+    # [PATCH-A] 單一有效登入：把本次登入設為該使用者唯一有效 Session，踢掉前次登入
+    from open_webui.utils.single_session import register_login_session
+
+    await register_login_session(user.id, token)
+
     if set_cookie and response:
         datetime_expires_at = datetime.datetime.fromtimestamp(expires_at, datetime.timezone.utc) if expires_at else None
         max_age = int(expires_delta.total_seconds()) if expires_delta else None

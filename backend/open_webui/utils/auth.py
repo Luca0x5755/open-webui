@@ -266,6 +266,12 @@ async def is_valid_token(decoded, redis=None) -> bool:
                 except (ValueError, TypeError):
                     pass
 
+    # [PATCH-A] 單一有效登入：拒絕非當前 Session 的 token（不依賴 Redis）
+    from open_webui.utils.single_session import is_active_session
+
+    if not await is_active_session(decoded):
+        return False
+
     return True
 
 
