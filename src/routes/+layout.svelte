@@ -110,6 +110,7 @@
 	let loaded = false;
 	let tokenTimer = null;
 	let isAuthRedirectInProgress = false;
+	let nativeFetch = null; // [PATCH-A] 未被攔截的原生 fetch，供 session 驗證使用
 
 	let showRefresh = false;
 
@@ -214,6 +215,16 @@
 		_socket.on('disconnect', (reason, details) => {
 			console.log(`Socket ${_socket.id} disconnected due to ${reason}`);
 			socketConnected.set(false);
+
+			// [PATCH-A] 單一有效登入：伺服器主動斷線（在他處登入被踢）時，
+			// 立即驗證 session；若已失效則轉跳登入頁。token 仍有效（如改權限重連）則不動作。
+			if (reason === 'io server disconnect' && localStorage.token && nativeFetch) {
+				isCurrentSessionUnauthorized(nativeFetch).then((unauthorized) => {
+					if (unauthorized) {
+						redirectToAuthAfterUnauthorized();
+					}
+				});
+			}
 
 			// Delay showing the disconnect toast so brief interruptions
 			// (e.g. mobile tab backgrounding) don't flash a nuisance warning
@@ -954,6 +965,7 @@
 
 	onMount(async () => {
 		const originalFetch = window.fetch.bind(window);
+		nativeFetch = originalFetch; // [PATCH-A] 供 socket 斷線時驗證 session
 		window.fetch = async (input, init) => {
 			const response = await originalFetch(input, init);
 

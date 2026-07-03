@@ -167,7 +167,9 @@
 
 	onMount(async () => {
 		const redirectPath = $page.url.searchParams.get('redirect');
-		if ($user !== undefined) {
+		// [PATCH-A] 單一有效登入：只有已登入（$user 為使用者物件）才離開登入頁；
+		// $user 為 null（被踢出/未登入）時須留在登入頁，否則會與 App 守衛互相轉跳造成無限迴圈。
+		if ($user) {
 			goto(redirectPath || '/');
 		} else {
 			if (redirectPath) {
