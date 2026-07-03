@@ -5,7 +5,7 @@
 > 2. 要同步時，把整份文件交給 AI 並說「照本文件執行同步」。
 > 3. AI 依「B. 執行授權」行動，並在「C. 本次執行紀錄」回填結果。
 >
-> 流程細節見 [`docs/fork維護流程.md`](fork維護流程.md)。
+> 分支操作步驟（新增／移除 Patch）見「D. 分支操作 SOP」。
 >
 > **本文件是分支拓撲與 Patch 登記的唯一權威來源，只在 `main` 維護。** 任何 patch 分支不得修改本文件（見「A. 分支堆疊表」與「B. 執行授權」）。
 
@@ -30,7 +30,7 @@
 | 2 | `feat/pdf-citation-source-panel` | `feat/single-active-session` | Patch B：PDF 引用來源面板（PR #25076） | `git rebase feat/single-active-session feat/pdf-citation-source-panel` |
 | 3 | `fork/release` | 鏡像堆疊最末端 tip | 部署分支（只 reset，不 commit） | `git reset --hard feat/pdf-citation-source-panel` |
 
-> 新增/移除 Patch：只改本表與下方登記（都在 `main`），再依表重新 rebase 堆疊即可。堆疊順序改變時，同步更新各列的 parent 與更新指令。
+> 新增/移除 Patch：只改本表與下方登記（都在 `main`），再依表重新 rebase 堆疊即可。堆疊順序改變時，同步更新各列的 parent 與更新指令。完整步驟見「D. 分支操作 SOP」。
 
 **Patch A（自製功能，已啟用）**
 - 分支：`feat/single-active-session`（parent：`main`）
@@ -136,3 +136,36 @@
 **6. 結論**
 - 本次結果：`[順利 / 需後續處理]`
 - 待辦：`[下次要注意的事項]`
+
+---
+
+## D. 分支操作 SOP（新增／移除 Patch，只在需要時執行）
+
+> 原則：**登記改在 `main`、程式碼放在分支**（見「A. 維護文件規則」）。所有 `push --force`、`reset --hard`、刪遠端分支，依「B. 執行授權」須逐一停下確認。
+
+### D-1 新增 Patch 分支
+
+前置：先決定新 Patch 疊在誰之上（parent＝堆疊表現有最末端 patch，或指定某一層）。
+
+1. **開分支**（從 parent）：`git switch <parent> && git switch -c <新分支名>`
+   - 命名：`feat/<簡短功能名>`；勿與上游觀察分支（如 `feat/exact-...`）同名。
+2. **放程式碼**（只在新分支 commit，**勿改本文件**）：
+   - 自製功能：改動處加 `[PATCH-A/B]` 標記，能新增檔就別改既有檔。
+   - 引用上游 PR：`git cherry-pick <上游 commit...>`，保留原作者、**不加**行內標記。
+3. **登記**（切回 `main` 改本文件）：`git switch main`
+   - 在「分支堆疊表」插入一列（填 parent 與更新指令），並於下方新增該 Patch 登記段（分支、功能、來源、影響檔案）。
+   - commit 後 `git push origin main`。
+4. **重疊堆疊**（依表由該層往下 rebase；本文件由 `merge=ours` 自動以 main 為準、不衝突）：
+   - `git rebase <parent> <新分支>`，再逐一 rebase 其所有下游。
+5. **對齊部署**：`git switch fork/release && git reset --hard <堆疊最末端 tip>`。
+6. **上線**：`git push --force-with-lease` 更新受影響分支（**逐一確認**）。
+
+### D-2 移除 Patch 分支（例：上游已合併該 PR，清理引用型 Patch）
+
+1. **登記**（切 `main` 改本文件）：`git switch main`
+   - 從「分支堆疊表」刪除該列；把它的下游 re-parent 到它原本的 parent，並同步更新該下游列的更新指令。
+   - 刪除對應的 Patch 登記段；commit 後 `git push origin main`。
+2. **重疊堆疊**（跳過被移除者）：`git rebase <新 parent> <下游分支>`，再往下逐一 rebase。
+3. **對齊部署**：`git switch fork/release && git reset --hard <堆疊最末端 tip>`。
+4. **收尾**：確認無誤後刪本地與遠端舊分支 `git branch -D <被移除分支>`、`git push origin --delete <被移除分支>`（**刪遠端須確認**）。
+5. **上線**：`git push --force-with-lease` 更新受影響分支（**逐一確認**）。
