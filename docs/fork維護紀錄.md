@@ -72,6 +72,7 @@
 
 **AI 可自行執行：**
 - `git status`、`git fetch upstream`、`git fetch origin`、`git log`、`git diff`（唯讀）
+- 查上游 PR 狀態（唯讀）：`gh pr view <PR編號> -R open-webui/open-webui --json state,baseRefName,mergedAt`
 - `main` 合併上游：`git merge upstream/main`（若有衝突，停下回報，見下方）
 - 依「分支堆疊表」對堆疊分支做 `git rebase`（`feat/single-active-session`、`feat/pdf-citation-source-panel`）
 - 對 `fork/release` 的 `git reset --hard <堆疊最末端 tip>`（目前為 `feat/pdf-citation-source-panel`）
@@ -132,6 +133,12 @@
 | --- | --- | --- | --- |
 | Patch B | PR #25076 | `[上游未合併 / 已合併]` | `[繼續維護 / 上游合併後移除本 Patch]` |
 | `feat/exact-pdf-citation-source-panel` | 上游 WIP 分支 | `[仍無內容 / 上游已開始開發]` | `[繼續觀察 / 評估是否採用]` |
+
+> **偵測 Patch B 是否可移除**（兩關卡都成立才移除；移除屬破壞性，**須停下等確認**後依「D-2」執行）：
+> - 關卡一（PR 已合併）：`gh pr view 25076 -R open-webui/open-webui --json state,mergedAt` → `state` 為 `MERGED`。
+> - 關卡二（功能已進追蹤線 `upstream/main`）：本次 `git merge upstream/main` 後，`git cat-file -e main:src/lib/components/chat/SourcePanel.svelte` 成立（main 已含該功能檔）。
+> - 只到關卡一（PR 通常先進 `dev`）**先不移除**——否則下個上游發版前會憑空少掉此功能；等關卡二成立再處理。
+> - 移除前確認：`git diff main feat/pdf-citation-source-panel` 應僅剩無關差異；若上游 squash/改寫致仍有實質差異，先評估 Patch B 要保留或調整，再決定是否移除。
 
 **6. 結論**
 - 本次結果：`[順利 / 需後續處理]`
