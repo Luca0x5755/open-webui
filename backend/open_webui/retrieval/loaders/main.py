@@ -160,12 +160,22 @@ class TikaLoader:
         endpoint = self.url
         if not endpoint.endswith('/'):
             endpoint += '/'
-        endpoint += 'tika/text'
+        # [PATCH-C] Tika 4.0 把 /tika/text 的輸出從 JSON 物件改為純文字，
+        # r.json() 會噴 JSONDecodeError。改打回 JSON 的 /rmeta/text 端點。
+        endpoint += 'rmeta/text'
 
         r = requests.put(endpoint, data=data, headers=headers, verify=REQUESTS_VERIFY)
 
         if r.ok:
-            raw_metadata = r.json()
+            # [PATCH-C] /rmeta/text 回傳為陣列（[0] 為母文件，已含內嵌圖片 OCR 的
+            # 彙整內容，因 Tika config 設了 inlineContent: true）；
+            # 以 isinstance 兼容舊版直接回物件的情況，避免 list.get 造成 AttributeError。
+            payload = r.json()
+            raw_metadata = (
+                payload[0]
+                if isinstance(payload, list) and payload
+                else (payload if isinstance(payload, dict) else {})
+            )
             text = raw_metadata.get('X-TIKA:content', '<No text content found>').strip()
 
             if 'Content-Type' in raw_metadata:
