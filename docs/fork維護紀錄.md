@@ -28,7 +28,8 @@
 | 0 | `main` | `upstream/main` | 上游同步線 + 本維護文件唯一維護處 | `git merge upstream/main` |
 | 1 | `feat/single-active-session` | `main` | Patch A：單一有效登入 | `git rebase main feat/single-active-session` |
 | 2 | `feat/pdf-citation-source-panel` | `feat/single-active-session` | Patch B：PDF 引用來源面板（PR #25076） | `git rebase feat/single-active-session feat/pdf-citation-source-panel` |
-| 3 | `fork/release` | 鏡像堆疊最末端 tip | 部署分支（只 reset，不 commit） | `git reset --hard feat/pdf-citation-source-panel` |
+| 3 | `feat/tika4-rmeta-loader` | `feat/pdf-citation-source-panel` | Patch C：Tika 4.0 上傳 JSONDecode 修正 | `git rebase feat/pdf-citation-source-panel feat/tika4-rmeta-loader` |
+| 4 | `fork/release` | 鏡像堆疊最末端 tip | 部署分支（只 reset，不 commit） | `git reset --hard feat/tika4-rmeta-loader` |
 
 > 新增/移除 Patch：只改本表與下方登記（都在 `main`），再依表重新 rebase 堆疊即可。堆疊順序改變時，同步更新各列的 parent 與更新指令。完整步驟見「D. 分支操作 SOP」。
 
@@ -49,9 +50,18 @@
 - 影響檔案：新增 `src/lib/components/chat/SourcePanel.svelte`；其餘為上游既有檔案改動（`Citations.svelte`、`common/PDFViewer.svelte`、`Chat.svelte`、`Messages*.svelte`、`Message.svelte`、`ResponseMessage.svelte`、`backend/open_webui/config.py`、`backend/open_webui/utils/middleware.py`）。
 - 交付文件：`docs/PDF引用來源面板.md`
 
+**Patch C（自製功能，已啟用）**
+- 分支：`feat/tika4-rmeta-loader`（parent：`feat/pdf-citation-source-panel`）
+- 功能說明：修正 OWUI 上傳檔案時的 `JSONDecodeError`。Apache Tika 4.0 把 `/tika/text` 端點輸出從 JSON 物件改為純文字，`TikaLoader.load()` 的 `r.json()` 因此解析失敗；改打回 JSON 的 `/rmeta/text` 端點並處理其陣列回應（取 `[0]` 為母文件）。因圖片 OCR 的 VLM parser 只在 Tika 4.0 提供，不能靠降版解決。
+- 改過的檔案（皆 `[PATCH-C]` 標記）：
+  - 後端：`backend/open_webui/retrieval/loaders/main.py`（`TikaLoader.load()`）
+- 程式碼標記：`[PATCH-C]`
+- 交付文件：`docs/Tika4上傳修正.md`
+- 上游動向：若日後升級 OWUI，先確認上游是否已支援 Tika 4.0；若上游已順應，可於同步時評估移除本 Patch C。
+
 **`fork/release`（部署分支）**
-- 定位：對外部署用的分支，內容 = 堆疊最末端 tip（目前為 Patch B）。
-- 更新方式：確認堆疊已重新 rebase、驗證通過後，`git checkout fork/release && git reset --hard feat/pdf-citation-source-panel`。
+- 定位：對外部署用的分支，內容 = 堆疊最末端 tip（目前為 Patch C）。
+- 更新方式：確認堆疊已重新 rebase、驗證通過後，`git checkout fork/release && git reset --hard feat/tika4-rmeta-loader`。
 - 只用 `reset --hard` 更新，不直接在這條分支上 commit。
 
 **`feat/exact-pdf-citation-source-panel`（上游追蹤分支，非本 fork 自製，不在堆疊內）**
@@ -74,8 +84,8 @@
 - `git status`、`git fetch upstream`、`git fetch origin`、`git log`、`git diff`（唯讀）
 - 查上游 PR 狀態（唯讀）：`gh pr view <PR編號> -R open-webui/open-webui --json state,baseRefName,mergedAt`
 - `main` 合併上游：`git merge upstream/main`（若有衝突，停下回報，見下方）
-- 依「分支堆疊表」對堆疊分支做 `git rebase`（`feat/single-active-session`、`feat/pdf-citation-source-panel`）
-- 對 `fork/release` 的 `git reset --hard <堆疊最末端 tip>`（目前為 `feat/pdf-citation-source-panel`）
+- 依「分支堆疊表」對堆疊分支做 `git rebase`（`feat/single-active-session`、`feat/pdf-citation-source-panel`、`feat/tika4-rmeta-loader`）
+- 對 `fork/release` 的 `git reset --hard <堆疊最末端 tip>`（目前為 `feat/tika4-rmeta-loader`）
 
 **AI 必須停下、回報、等我確認後才能做：**
 - 解決任何 merge / rebase / cherry-pick 衝突（先說明衝突內容與建議，不要自行決定保留哪邊）
@@ -114,7 +124,8 @@
 | `main` | `git merge upstream/main` | `[成功 / 有衝突]` |
 | `feat/single-active-session` | `git rebase main feat/single-active-session` | `[成功 / 有衝突]` |
 | `feat/pdf-citation-source-panel` | `git rebase feat/single-active-session feat/pdf-citation-source-panel` | `[成功 / 有衝突]` |
-| `fork/release` | `git reset --hard feat/pdf-citation-source-panel` | `[完成]` |
+| `feat/tika4-rmeta-loader` | `git rebase feat/pdf-citation-source-panel feat/tika4-rmeta-loader` | `[成功 / 有衝突]` |
+| `fork/release` | `git reset --hard feat/tika4-rmeta-loader` | `[完成]` |
 | `feat/exact-pdf-citation-source-panel` | `git fetch origin`（僅觀察，不合併） | `[有新內容 / 仍無差異]` |
 
 **3. 衝突處理**（無則填「無」；依 B 區規則，需等確認後才動手）
