@@ -225,7 +225,13 @@
 - [x] 前端建置：6355 modules `✓ built`，零錯誤
 - [x] **Patch A**：兩個隔離瀏覽器情境同帳號登入，A 被踢後自動落 `/auth?redirect=%2F`（非空白頁）、token 與 cookie 清空、無轉跳迴圈、B 仍正常；後端舊 token 401 / 新 token 200。log 時序 `disconnect_user_sessions` → 17ms 後 401，證實走的是本次改動的 socket 路徑。
 - [x] **Patch B**：上傳 6 頁 PDF + 以 API 灌入帶 `[1#0]/[1#1]/[1#2]` 的訊息（免 LLM）。三個引用分別捲到 scrollTop 0 / 1950 / 3900（每頁 975px，精準對應第 1/3/5 頁）；手動捲開後重複點擊仍能回正確頁（`scrollRequestId` 有效）；關閉正常、零 console error。
-- [x] **Patch C**：起真 Apache Tika（3.3.1）確認契約差異（`/tika/text` 回 JSON 物件、`/rmeta/text` 回 JSON 陣列）；以 `inspect.getsource` 斷言執行的是 PATCH-C 版本後實打，`.txt` 正確抽字、空白 PDF 正確落 `<No text content found>` 備援。未取得 Tika 4.0 映像，故未重現原始 regression。
+- [x] **Patch C**：以 `inspect.getsource` 斷言執行版本後，對兩個版本的 Tika 各實打一次。
+  - **Tika 3.3.1**（`apache/tika:latest`）：`/tika/text` 回 JSON **物件**、`/rmeta/text` 回 JSON **陣列**——兩個端點皆可解析，故舊版不會踩到此 bug。
+  - **Tika 4.0**（`apache/tika:4.0.0-SNAPSHOT-full`）：`/tika/text` 回**純文字**，`json.loads` 噴 `JSONDecodeError: Expecting value: line 17 column 1`；`/rmeta/text` 仍回 JSON 陣列（`len=1`、`[0]` 含 `X-TIKA:content`）。
+  - **A/B 對照**（同一份 `.txt`、同一台 Tika 4.0）：上游未修補版 → `JSONDecodeError`；rebase 後的 PATCH-C 版 → 成功抽出全文，metadata `Content-Type: text/plain; charset=UTF-8`。
+  - 另測空白 PDF 正確落到 `<No text content found>` 備援。
+
+> Patch C 的移除判定：直接對 Tika 4.0 打 `/tika/text`，若上游哪天改回傳 JSON、或 OWUI 自行改用 `/rmeta/text`，才可評估移除。截至 v0.11.0，上游仍是 `tika/text` + `r.json()`。
 
 **5. PR / 分支狀態追蹤**
 
