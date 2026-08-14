@@ -42,6 +42,18 @@
 - 新增檔案：`backend/open_webui/models/user_sessions.py`、`backend/open_webui/migrations/versions/a1c0ffee5e55_add_user_session_table.py`、`backend/open_webui/utils/single_session.py`、`docs/單一有效登入.md`
 - 程式碼標記：`[PATCH-A]`
 
+> ⚠️ **每次跨版本同步必做：重新指向 migration 的 `down_revision`。**
+> Patch A 是本 fork 唯一動到資料庫 schema 的 patch（新增 `user_session` 表）。它的遷移檔 `a1c0ffee5e55` 把 `down_revision` 釘在**當時**上游的 alembic head；上游新版一旦加了新遷移，這裡就會變成**兩個 head**，`alembic upgrade head` 直接失敗。
+>
+> **這是靜默故障**：rebase 不會衝突、程式碼能編譯、容器照樣啟動，但 `user_session` 表建不出來，單一有效登入等於沒開，沒有任何錯誤訊息指向這裡。
+>
+> 做法（rebase Patch A 之後、驗證之前）：
+> 1. 找出上游新 head：`ls backend/open_webui/migrations/versions/*.py`，取沒有被任何檔案當作 `down_revision` 引用、且不是 `a1c0ffee5e55` 的那一個。
+> 2. 改 `a1c0ffee5e55_add_user_session_table.py` 的 `down_revision`（連同 docstring 的 `Revises:`）指向它。
+> 3. 驗證只剩單一 head——啟動容器後 `select * from alembic_version` 應為 `a1c0ffee5e55`，且啟動 log 出現 `Running upgrade <上游新head> -> a1c0ffee5e55`。
+>
+> 歷次指向：`42e2978c7933`（v0.10.2）→ `f0bd01a18a3d`（v0.11.0）。
+
 **Patch B（引用上游 PR，已啟用）**
 - 分支：`feat/pdf-citation-source-panel`（parent：`feat/single-active-session`）
 - 來源：PR #25076（`open-webui/open-webui`，狀態 OPEN、目標 `dev`）。功能：PDF 引用來源面板——點擊精確 PDF 引用時於右側開啟該 PDF 並跳到引用頁。
@@ -64,11 +76,11 @@
 - 更新方式：確認堆疊已重新 rebase、驗證通過後，`git checkout fork/release && git reset --hard feat/tika4-rmeta-loader`。
 - 只用 `reset --hard` 更新，不直接在這條分支上 commit。
 
-**`feat/exact-pdf-citation-source-panel`（上游追蹤分支，非本 fork 自製，不在堆疊內）**
+**`feat/exact-pdf-citation-source-panel`（上游追蹤分支的殘留副本，非本 fork 自製，不在堆疊內）**
 - 來源：從上游 open-webui 帶過來的分支（commit 作者為上游維護者 Tim Baek），不是本 fork 開發的功能。
-- 現況：與其 merge-base 相比目前**沒有任何內容差異**——上游還沒真的往裡面加程式碼，純觀察點。
-- 處理方式：每次同步時 `git fetch origin` 觀察其進度即可，**不需要**合併進 `main` 或做任何 rebase。
-- 註：其功能（PDF 引用面板）我方已以 Patch B（cherry-pick PR #25076）提前導入；此觀察分支僅續追上游該分支自身進度，兩者互不影響。
+- 現況（2026-08-14 查證）：**上游已刪除此分支**（`git ls-remote --heads upstream | grep exact` 無結果），只剩 origin 上的一份殘留副本 `b711935dd`，本地無同名分支。與其 merge-base 相比沒有任何內容差異——上游從未往裡面加程式碼。
+- 處理方式：**不需要**合併進 `main` 或做任何 rebase。上游既已刪分支，此觀察點已失去意義，可於下次同步時評估刪除 origin 上的殘留副本（刪遠端分支依 B 區須停下確認）。
+- 註：其功能（PDF 引用面板）我方已以 Patch B（cherry-pick PR #25076）提前導入，兩者互不影響。
 
 ### 維護文件規則（避免 rebase 衝突與拓撲分歧）
 
@@ -126,7 +138,10 @@
 | `feat/pdf-citation-source-panel` | `git rebase feat/single-active-session feat/pdf-citation-source-panel` | `[成功 / 有衝突]` |
 | `feat/tika4-rmeta-loader` | `git rebase feat/pdf-citation-source-panel feat/tika4-rmeta-loader` | `[成功 / 有衝突]` |
 | `fork/release` | `git reset --hard feat/tika4-rmeta-loader` | `[完成]` |
-| `feat/exact-pdf-citation-source-panel` | `git fetch origin`（僅觀察，不合併） | `[有新內容 / 仍無差異]` |
+| `feat/exact-pdf-citation-source-panel` | 上游已刪除，origin 殘留副本（僅觀察，不合併） | `[維持 / 已清除]` |
+
+> **rebase Patch A 之後、往下疊之前**：重新指向 `a1c0ffee5e55` 的 `down_revision`（見 A 區 Patch A 登記的 ⚠️ 說明）。跨版本同步時不做這步，`alembic upgrade head` 會因 multiple heads 失敗，且**不會有任何錯誤指向 Patch A**。
+> - 本次指向：`[上游新 head]`
 
 **3. 衝突處理**（無則填「無」；依 B 區規則，需等確認後才動手）
 - 衝突檔案：`[檔案路徑]`
@@ -136,7 +151,14 @@
 **4. 驗證**
 - [ ] `git log --oneline` 確認 `main` 已包含上游最新 commit
 - [ ] 本地建置或啟動測試通過
-- [ ] `[PATCH-A]` / `[PATCH-B]` 功能實測正常
+- [ ] **Alembic 單一 head**：容器啟動 log 有 `Running upgrade <上游新head> -> a1c0ffee5e55`，且 `alembic_version` = `a1c0ffee5e55`
+- [ ] `[PATCH-A]` / `[PATCH-C]` 行內標記數量與同步前一致（`grep -ro '\[PATCH-A\]' backend/ src/ | wc -l`）
+- [ ] Patch A / B / C 功能實測正常（Patch B 無行內標記，靠功能實測把關）
+
+> **rebase 乾淨 ≠ 正確。** 本次同步實際發生過：git 未報衝突卻靜默丟掉一個函式定義、留下孤兒呼叫。每次 rebase 後除了看衝突，還要驗
+> (a) 刪除的行是否全屬本 patch 該改的（`git diff <parent> <branch> | grep '^-'` 逐行看）；
+> (b) 用 `git range-diff <舊parent>..<舊tip> <新parent>..<新tip>` 比對 patch 本身有無非預期變化；
+> (c) 跨檔案的呼叫鏈／事件鏈是否仍完整（上游大改介面時最容易在此靜默失效）。
 
 **5. PR / 分支狀態追蹤**
 
@@ -154,6 +176,71 @@
 **6. 結論**
 - 本次結果：`[順利 / 需後續處理]`
 - 待辦：`[下次要注意的事項]`
+
+---
+
+### `2026-08-14` — `跨版本同步 v0.10.2 → v0.11.0`
+
+**執行人 / AI:** Claude Code（Opus 5）
+**上游基準:** tag `v0.11.0` @ `f9590b801`
+
+> 註：`upstream/main` 當時已在 `01f4282f1`（領先 v0.11.0 兩個 commit），**刻意只合併到 tag `v0.11.0`**，以對齊正式發版點。
+
+**1. 同步前檢查**
+- [x] `git status` 乾淨
+- [x] `git fetch upstream` / `origin` 完成
+- [x] `merge.ours.driver` = `true`
+- [x] 同步前建立回退點（本 fork 首次打 tag，已推 origin）：
+  - `fork-v0.10.2-main` → `13178b8e6`
+  - `fork-v0.10.2-stack` → `0143a22d1`（涵蓋 A/B/C，因 A、B 皆為 C 的祖先）
+
+**2. 分支同步**
+
+| 分支 | 結果 | 新 tip |
+| --- | --- | --- |
+| `main` | 合併乾淨（事前以 `git merge-tree --write-tree` 預檢，exit 0）；649 檔 +85388/−37651 | `929844029` |
+| `feat/single-active-session` | 2 段衝突 + 1 處靜默丟失，已處理 | `8b7963112` |
+| `feat/pdf-citation-source-panel` | 7 段衝突，已處理 | `e16ebeade` |
+| `feat/tika4-rmeta-loader` | **零衝突**（上游未碰 `TikaLoader`），`range-diff` 顯示逐位元組相同 | `7a9d5c92e` |
+| `fork/release` | `reset --hard feat/tika4-rmeta-loader` 完成 | `7a9d5c92e` |
+| `feat/exact-pdf-citation-source-panel` | 上游已刪除該分支，origin 殘留 `b711935dd` | 未動 |
+
+> Patch A 的 `down_revision` 已重指：`42e2978c7933` → `f0bd01a18a3d`（commit `8b7963112`）。
+
+**3. 衝突處理**
+
+*Patch A*
+- `src/routes/+layout.svelte`：上游 v0.11.0 自行實作了 `clearExpiredSession()`，是 Patch A 原本 `redirectToAuthAfterUnauthorized()` 的**超集**（多做清 `tokenTimer`、清 OAuth cookie、呼叫 `userSignOut()`）。改呼叫上游函式，Patch A 因此縮為 **268 行純新增、0 行刪除**，不再改動任何上游程式碼。
+- `src/routes/auth/+page.svelte`：純註解衝突，保留 `[PATCH-A]` 註解。
+- **靜默丟失**：rebase 未報衝突卻移除了 `redirectToAuthAfterUnauthorized` 的定義，留下孤兒呼叫。由解衝突後的 grep 覆驗抓到，非 git 提示。
+
+*Patch B*
+- 6 段成因相同：上游在同一 prop 位置新增 `{onInsertToNote}`，Patch B 在同位置新增 `on:openSourcePanel`。兩者皆為純新增 → **兩邊都留**。（`Chat.svelte`、`Messages.svelte`、`Message.svelte`、`MultiResponseMessages.svelte`×2）
+- `Chat.svelte` ChatControls 區塊：上游把開關由 `{#if $showControls}` 改為 `{#if !embedded}`。採用上游版本，並依使用者決定將 SourcePanel 一併 gate 為 `{#if sourcePanelTarget && !embedded}`——`embedded` 是 v0.11.0 全新引入（舊版 0 次出現），Patch B 原本無從考慮；唯一使用者是 `NoteEditor.svelte`，內嵌聊天不宜再開 35% 寬側邊面板。
+- `Chat.svelte` `containerId={chatContainerId}`：上下文位移造成的假衝突，保留上游。
+
+**4. 驗證**（三個 patch 皆以 Docker 實機測試，非僅編譯）
+- [x] Alembic 單一 head：log 有 `Running upgrade f0bd01a18a3d -> a1c0ffee5e55`，`alembic_version` = `a1c0ffee5e55`，`user_session` 表與 CASCADE 外鍵正確
+- [x] 標記數量：`[PATCH-A]` 9 處 / 7 檔、`[PATCH-C]` 2 處
+- [x] 前端建置：6355 modules `✓ built`，零錯誤
+- [x] **Patch A**：兩個隔離瀏覽器情境同帳號登入，A 被踢後自動落 `/auth?redirect=%2F`（非空白頁）、token 與 cookie 清空、無轉跳迴圈、B 仍正常；後端舊 token 401 / 新 token 200。log 時序 `disconnect_user_sessions` → 17ms 後 401，證實走的是本次改動的 socket 路徑。
+- [x] **Patch B**：上傳 6 頁 PDF + 以 API 灌入帶 `[1#0]/[1#1]/[1#2]` 的訊息（免 LLM）。三個引用分別捲到 scrollTop 0 / 1950 / 3900（每頁 975px，精準對應第 1/3/5 頁）；手動捲開後重複點擊仍能回正確頁（`scrollRequestId` 有效）；關閉正常、零 console error。
+- [x] **Patch C**：起真 Apache Tika（3.3.1）確認契約差異（`/tika/text` 回 JSON 物件、`/rmeta/text` 回 JSON 陣列）；以 `inspect.getsource` 斷言執行的是 PATCH-C 版本後實打，`.txt` 正確抽字、空白 PDF 正確落 `<No text content found>` 備援。未取得 Tika 4.0 映像，故未重現原始 regression。
+
+**5. PR / 分支狀態追蹤**
+
+| 項目 | 來源 | 狀態 | 後續動作 |
+| --- | --- | --- | --- |
+| Patch B | PR #25076 | 仍 `OPEN`、目標 `dev`、`mergedAt: null` | **繼續維護**。關卡一、二皆不成立（v0.11.0 無 `SourcePanel.svelte`） |
+| Patch C | 上游 Tika 支援 | v0.11.0 仍為 `tika/text` + `r.json()`，**未修** | 繼續維護 |
+| `feat/exact-pdf-citation-source-panel` | 上游 WIP 分支 | **上游已刪除**，origin 殘留副本 | 觀察點已失效，下次評估刪除 origin 殘留 |
+
+**6. 結論**
+- 本次結果：順利。三個 patch 全部保留並實測通過。
+- 待辦：
+  - 下次同步前先看 `docker builder du`。本次快取僅命中 2 層，全量重建約 35–40 分鐘（`npm ci` 20 分、`apt-get` 16 分，皆為網路等待）。
+  - 以 `USE_SLIM=true` 建置的映像**執行時**才抓 embedding 模型，會卡住啟動；測試時加 `-e RAG_EMBEDDING_ENGINE=ollama` 繞開。config 首次啟動即 seed 進 DB，換 env 需連 volume 一併清除才生效。
+  - 評估刪除 origin 上的 `feat/exact-pdf-citation-source-panel` 殘留副本。
 
 ---
 
