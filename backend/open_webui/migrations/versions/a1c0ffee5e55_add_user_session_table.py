@@ -3,7 +3,7 @@
 [PATCH-A] 單一有效登入：記錄每位使用者當前有效 Session 的 jti。
 
 Revision ID: a1c0ffee5e55
-Revises: f0bd01a18a3d
+Revises: d4c1a8e37b62
 Create Date: 2026-07-03 00:00:00.000000
 
 """
@@ -15,7 +15,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = 'a1c0ffee5e55'
-down_revision: Union[str, None] = 'f0bd01a18a3d'
+down_revision: Union[str, None] = 'd4c1a8e37b62'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
