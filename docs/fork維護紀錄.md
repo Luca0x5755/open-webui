@@ -74,11 +74,18 @@
 - **移除原因**：上游在 v0.11.0→v0.11.3 之間原生修好同一個問題，新增 `RAG.TIKA_SERVER_VERSION` 設定（環境變數 `TIKA_SERVER_VERSION`，預設 `'3'`），依版本切換端點：`'3'` 打 `tika/text`（讀 `X-TIKA:content`）、`'4'` 打 `tika/json/text`（讀 `tk:content`）。串接路徑（`retrieval/utils.py`、`routers/retrieval.py`、admin API `RAGConfigForm.TIKA_SERVER_VERSION`）皆完整，可在 Admin → Documents 後台直接切換，不必改程式碼。
 - **決策**：改用上游原生方案，移除自製 patch 降低長期維護面。
 - ⚠️ **部署配套動作（必做，見下方「部署備忘」）**：上游預設值是 `'3'`，本 fork 部署依賴 Tika 4.0（圖片 OCR 的 VLM parser 只有 4.0 提供）。若同步後沒有把 `TIKA_SERVER_VERSION` 設成 `'4'`，會**靜默退回** Patch C 修復前的 `JSONDecodeError`，且不會有任何錯誤訊息指向這裡。
+- ⚠️ **驗證時發現的第二個坑：`tk:content` 這個鍵名要求夠新的 Tika 4.0 SNAPSHOT build**——2026-09-14 實測本機快取的舊 image（build 2026-07-25）回應仍是 `X-TIKA:content`（跟 v3 一樣），`tk:content` 不存在，導致 `server_version='4'` 雖不噴錯，卻**靜默**拿到空字串 `<No text content found>`，比原本的 `JSONDecodeError` 更難察覺。重新 `docker pull apache/tika:4.0.0-SNAPSHOT-full` 拿到新 image（build 2026-08-18）後，回應才改用 `tk:content`，上游程式碼與實測結果一致。**結論：Tika 專案本身在這兩個 SNAPSHOT build 之間把 metadata key 命名從 `X-TIKA:` 改成 `tk:`，這不是上游 OWUI 程式碼的問題，是 SNAPSHOT image 版本飄移的問題。**
 - 交付文件 `docs/Tika4上傳修正.md` 隨分支一併移除，需要時可從 `fork-v0.11.0-stack` tag 取回。
 
 ### 部署備忘
 
 - **Tika 版本設定（v0.11.3 起必做）**：本 fork 部署使用 Apache Tika 4.0（原因：圖片 OCR 的 VLM parser 只有 4.0 提供，不能降版解決）。上游原生的 `TIKA_SERVER_VERSION` 設定預設是 `'3'`，**部署時必須明確設成 `'4'`**（環境變數 `TIKA_SERVER_VERSION=4`，或啟動後於 Admin → Documents 後台設定），否則檔案上傳會靜默回到 `JSONDecodeError`（v0.11.3 之前由已移除的 Patch C 修復，見上方「已移除的 Patch」）。
+- **Tika image 必須夠新（v0.11.3 起必做）**：`apache/tika:4.0.0-SNAPSHOT-full` 是浮動 tag，SNAPSHOT 內容會隨時間改變。實測 2026-07-25 的 build 用 `X-TIKA:content`、2026-08-18 之後的 build 才改用上游程式碼要讀的 `tk:content`。部署或重建映像前務必 `docker pull` 拿最新 SNAPSHOT，並用本機驗證方式（見下）確認 JSON 回應含 `tk:content` 鍵，否則會遇到「不噴錯但抽出空文字」的靜默故障：
+  ```bash
+  curl -s -X PUT --data-binary @somefile.txt -H "Content-Type: text/plain" \
+    http://<TIKA_HOST>:9998/tika/json/text | grep -o "tk:content"
+  ```
+  沒有輸出就代表這個 Tika image 太舊，`TIKA_SERVER_VERSION=4` 對它無效。
 - 本 repo 未 tracked 任何設定此值的 `docker-compose`/`.env`（Tika 服務為外部自建），故每個部署環境都要自行確認此設定，不會由程式碼預設帶出正確值。
 
 ### 維護文件規則（避免 rebase 衝突與拓撲分歧）
@@ -270,12 +277,15 @@
 
 *Patch B / C*：無 rebase 衝突可言——整支移除，未嘗試 rebase。
 
-**4. 驗證**
+**4. 驗證**（本次未走完整 Docker image build——建置卡住/效率異常，見「結論」——改用本機 venv + `bash dev.sh` 風格直接啟動＋API 測試，驗證目的等價）
 - [x] `[PATCH-A]` 行內標記數量：9 處 / 7 檔，與 v0.11.0 同步時一致（`--exclude-dir=__pycache__` 排除 bytecode 誤報）
 - [x] `git range-diff fork-v0.11.0-main..fork-v0.11.0-stack main..feat/single-active-session`：Patch A 自身 2 個功能 commit 內容與預期一致，無非預期變化
-- [ ] 前端建置 / Docker 實機測試（待補）
-- [ ] Alembic 單一 head 實測（待補：`Running upgrade d4c1a8e37b62 -> a1c0ffee5e55`）
-- [ ] **Tika 原生方案 smoke test**：設 `TIKA_SERVER_VERSION=4`，對 Tika 4.0 灌一份文件確認正確抽出全文（取代原 Patch C 的 A/B 對照測試）
+- [x] `npm run check`：7791 個既有型別問題，與合併前數量一致，無新增
+- [x] 本機啟動測試：`.venv` + `pip install -r backend/requirements.txt` + 直接跑 `uvicorn open_webui.main:app`（SQLite），`import open_webui.main` 成功、伺服器正常啟動
+- [x] **Alembic 單一 head**：啟動 log 實際出現 `Running upgrade d4c1a8e37b62 -> a1c0ffee5e55, Add user_session table`，`user_session` 表建立成功
+- [x] **Patch A 功能實測**（API 層，等價於雙瀏覽器測試）：同帳號登入兩次拿到不同 token；舊 token 打 `/api/v1/auths/` → `401`；新 token 打同一支 API → `200`
+- [x] **Tika 原生方案 smoke test**：直接呼叫 `TikaLoader(server_version='4')` 對 `apache/tika:4.0.0-SNAPSHOT-full` 容器，正確抽出全文；`server_version='3'` 對同一台 Tika 4.0 重現原始 `JSONDecodeError`，驗證了「上游原生方案確實解決同一個問題」
+  - ⚠️ 過程中發現本機快取的 Tika image（build 2026-07-25）用的是 `X-TIKA:content`、不是上游程式碼要讀的 `tk:content`，導致 `server_version='4'` 不噴錯但靜默拿到空字串；重新 `docker pull` 到 2026-08-18 的 build 後才正確。已記錄進 A 區「部署備忘」。
 
 **5. PR / 分支狀態追蹤**
 
@@ -287,8 +297,12 @@
 | `pr-25076`（未登記殘留分支） | 先前手動測試 PR #25076 cherry-pick 用 | 已確認為測試殘留 | 本次一併清除 |
 
 **6. 結論**
-- 本次結果：`[待驗證完成後填]`
-- 待辦：`[待驗證與分支清理完成後填]`
+- 本次結果：順利。Patch A rebase 成功並實測通過，Patch B/C 整支移除且移除依據都經過查證（PR 已 CLOSED、上游原生方案實測可行），堆疊由四層收斂為兩層。
+- 這次沒有走完整 Docker image build 驗證：嘗試建置時觀察到疑似卡住（`docker events` 過去 60 分鐘無任何 pull/build 事件，但同時 `docker pull hello-world` 7 秒完成、證明非網路問題），研判是這次建置流程本身的問題，改用本機 Python venv 直接跑 `uvicorn`（`bash dev.sh` 風格）達到同等驗證效果，且更快。下次同步建議先確認 Docker build 沒有類似異常再投入時間等待，或優先採用本機驗證路徑。
+- 待辦：
+  - 找時間查清楚這次 Docker image build 卡住的根因（是這台機器的 buildx 狀態問題，還是 Dockerfile 本身在 v0.11.3 有變化導致建置變慢/卡住），影響往後是否還能倚賴 Docker 驗證流程。
+  - `apache/tika:4.0.0-SNAPSHOT-full` 是浮動 SNAPSHOT tag，`tk:content` 這個上游程式碼依賴的 metadata key 只在夠新的 build（2026-08-18 之後）才存在。部署或重建正式 Tika 服務前務必重新 `docker pull` 並用文件裡「部署備忘」的 curl 指令驗證，不能假設本機快取的舊 image 還適用。
+  - 驗證用的 `.venv-v0113-test/`、`.scratch-tika-test/`、測試用 Docker 容器（`tika4-test-new`）與 image 為本機一次性產物，非追蹤內容，會在完成後清理，不會進 commit。
 
 ---
 
