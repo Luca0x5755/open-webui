@@ -27,9 +27,9 @@
 | --- | --- | --- | --- | --- |
 | 0 | `main` | `upstream/main` | 上游同步線 + 本維護文件唯一維護處 | `git merge upstream/main` |
 | 1 | `feat/single-active-session` | `main` | Patch A：單一有效登入 | `git rebase main feat/single-active-session` |
-| 2 | `feat/pdf-citation-source-panel` | `feat/single-active-session` | Patch B：PDF 引用來源面板（PR #25076） | `git rebase feat/single-active-session feat/pdf-citation-source-panel` |
-| 3 | `feat/tika4-rmeta-loader` | `feat/pdf-citation-source-panel` | Patch C：Tika 4.0 上傳 JSONDecode 修正 | `git rebase feat/pdf-citation-source-panel feat/tika4-rmeta-loader` |
-| 4 | `fork/release` | 鏡像堆疊最末端 tip | 部署分支（只 reset，不 commit） | `git reset --hard feat/tika4-rmeta-loader` |
+| 2 | `fork/release` | 鏡像堆疊最末端 tip | 部署分支（只 reset，不 commit） | `git reset --hard feat/single-active-session` |
+
+> 2026-09-14（v0.11.3 同步）：Patch B、Patch C 皆已整支移除，堆疊由四層收斂為兩層。細節見下方「已移除的 Patch」與「部署備忘」。
 
 > 新增/移除 Patch：只改本表與下方登記（都在 `main`），再依表重新 rebase 堆疊即可。堆疊順序改變時，同步更新各列的 parent 與更新指令。完整步驟見「D. 分支操作 SOP」。
 
@@ -54,33 +54,32 @@
 >
 > 歷次指向：`42e2978c7933`（v0.10.2）→ `f0bd01a18a3d`（v0.11.0）。
 
-**Patch B（引用上游 PR，已啟用）**
-- 分支：`feat/pdf-citation-source-panel`（parent：`feat/single-active-session`）
-- 來源：PR #25076（`open-webui/open-webui`，狀態 OPEN、目標 `dev`）。功能：PDF 引用來源面板——點擊精確 PDF 引用時於右側開啟該 PDF 並跳到引用頁。
-- 導入方式：以 `git cherry-pick` 逐字套用上游兩個 commit（`c38f98c09` 後端、`b98415286` 前端），保留原作者、保持與上游一致以利日後同步。
-- 追蹤方式：逐字移植上游 commit，故**不加 `[PATCH-B]` 行內標記**（以免污染與上游的差異）；改以「commit 出處（作者 glonor、上述 hash）＋本登記」辨識。上游合併 PR #25076 後即可於同步時移除本 Patch B。
-- 影響檔案：新增 `src/lib/components/chat/SourcePanel.svelte`；其餘為上游既有檔案改動（`Citations.svelte`、`common/PDFViewer.svelte`、`Chat.svelte`、`Messages*.svelte`、`Message.svelte`、`ResponseMessage.svelte`、`backend/open_webui/config.py`、`backend/open_webui/utils/middleware.py`）。
-- 交付文件：`docs/PDF引用來源面板.md`
-
-**Patch C（自製功能，已啟用）**
-- 分支：`feat/tika4-rmeta-loader`（parent：`feat/pdf-citation-source-panel`）
-- 功能說明：修正 OWUI 上傳檔案時的 `JSONDecodeError`。Apache Tika 4.0 把 `/tika/text` 端點輸出從 JSON 物件改為純文字，`TikaLoader.load()` 的 `r.json()` 因此解析失敗；改打回 JSON 的 `/rmeta/text` 端點並處理其陣列回應（取 `[0]` 為母文件）。因圖片 OCR 的 VLM parser 只在 Tika 4.0 提供，不能靠降版解決。
-- 改過的檔案（皆 `[PATCH-C]` 標記）：
-  - 後端：`backend/open_webui/retrieval/loaders/main.py`（`TikaLoader.load()`）
-- 程式碼標記：`[PATCH-C]`
-- 交付文件：`docs/Tika4上傳修正.md`
-- 上游動向：若日後升級 OWUI，先確認上游是否已支援 Tika 4.0；若上游已順應，可於同步時評估移除本 Patch C。
-
 **`fork/release`（部署分支）**
-- 定位：對外部署用的分支，內容 = 堆疊最末端 tip（目前為 Patch C）。
-- 更新方式：確認堆疊已重新 rebase、驗證通過後，`git checkout fork/release && git reset --hard feat/tika4-rmeta-loader`。
+- 定位：對外部署用的分支，內容 = 堆疊最末端 tip（目前為 Patch A）。
+- 更新方式：確認堆疊已重新 rebase、驗證通過後，`git checkout fork/release && git reset --hard feat/single-active-session`。
 - 只用 `reset --hard` 更新，不直接在這條分支上 commit。
 
-**`feat/exact-pdf-citation-source-panel`（上游追蹤分支的殘留副本，非本 fork 自製，不在堆疊內）**
-- 來源：從上游 open-webui 帶過來的分支（commit 作者為上游維護者 Tim Baek），不是本 fork 開發的功能。
-- 現況（2026-08-14 查證）：**上游已刪除此分支**（`git ls-remote --heads upstream | grep exact` 無結果），只剩 origin 上的一份殘留副本 `b711935dd`，本地無同名分支。與其 merge-base 相比沒有任何內容差異——上游從未往裡面加程式碼。
-- 處理方式：**不需要**合併進 `main` 或做任何 rebase。上游既已刪分支，此觀察點已失去意義，可於下次同步時評估刪除 origin 上的殘留副本（刪遠端分支依 B 區須停下確認）。
-- 註：其功能（PDF 引用面板）我方已以 Patch B（cherry-pick PR #25076）提前導入，兩者互不影響。
+### 已移除的 Patch（歷史紀錄，分支已刪除）
+
+**Patch B（PDF 引用來源面板，於 v0.11.3 同步時移除）**
+- 原分支：`feat/pdf-citation-source-panel`（parent：`feat/single-active-session`）。舊內容可從備份 tag `fork-v0.11.0-stack` 回溯。
+- 原功能：來源 PR #25076，逐字 cherry-pick 上游兩個 commit（`c38f98c09` 後端、`b98415286` 前端），點擊精確 PDF 引用時於右側開啟該 PDF 並跳到引用頁。
+- **移除原因**：PR #25076 已於 2026-08-28 被上游作者正式 **CLOSED**（非合併），上游選擇了不同方向——`display_file` 工具機制（由 AI 主動觸發開檔，非點擊引用自動跳頁），明確表示不打算走這個 PR 的體驗路線。原訂「PR 合併即移除」的關卡永久不會成立。
+- **決策**：與其無限期維護一支上游已拒絕方向的 cherry-pick patch，選擇整支移除、接受 UX 改變（使用者不再有「點擊引用自動跳頁」功能）。
+- 交付文件 `docs/PDF引用來源面板.md` 隨分支一併移除，需要時可從 `fork-v0.11.0-stack` tag 取回。
+
+**Patch C（Tika 4.0 上傳修正，於 v0.11.3 同步時移除，改用上游原生方案）**
+- 原分支：`feat/tika4-rmeta-loader`（parent：`feat/pdf-citation-source-panel`）。舊內容可從備份 tag `fork-v0.11.0-stack` 回溯。
+- 原功能：修正 `TikaLoader.load()` 對 Apache Tika 4.0 的 `JSONDecodeError`，改打 `/rmeta/text` 端點通吃 Tika 3.x/4.x。
+- **移除原因**：上游在 v0.11.0→v0.11.3 之間原生修好同一個問題，新增 `RAG.TIKA_SERVER_VERSION` 設定（環境變數 `TIKA_SERVER_VERSION`，預設 `'3'`），依版本切換端點：`'3'` 打 `tika/text`（讀 `X-TIKA:content`）、`'4'` 打 `tika/json/text`（讀 `tk:content`）。串接路徑（`retrieval/utils.py`、`routers/retrieval.py`、admin API `RAGConfigForm.TIKA_SERVER_VERSION`）皆完整，可在 Admin → Documents 後台直接切換，不必改程式碼。
+- **決策**：改用上游原生方案，移除自製 patch 降低長期維護面。
+- ⚠️ **部署配套動作（必做，見下方「部署備忘」）**：上游預設值是 `'3'`，本 fork 部署依賴 Tika 4.0（圖片 OCR 的 VLM parser 只有 4.0 提供）。若同步後沒有把 `TIKA_SERVER_VERSION` 設成 `'4'`，會**靜默退回** Patch C 修復前的 `JSONDecodeError`，且不會有任何錯誤訊息指向這裡。
+- 交付文件 `docs/Tika4上傳修正.md` 隨分支一併移除，需要時可從 `fork-v0.11.0-stack` tag 取回。
+
+### 部署備忘
+
+- **Tika 版本設定（v0.11.3 起必做）**：本 fork 部署使用 Apache Tika 4.0（原因：圖片 OCR 的 VLM parser 只有 4.0 提供，不能降版解決）。上游原生的 `TIKA_SERVER_VERSION` 設定預設是 `'3'`，**部署時必須明確設成 `'4'`**（環境變數 `TIKA_SERVER_VERSION=4`，或啟動後於 Admin → Documents 後台設定），否則檔案上傳會靜默回到 `JSONDecodeError`（v0.11.3 之前由已移除的 Patch C 修復，見上方「已移除的 Patch」）。
+- 本 repo 未 tracked 任何設定此值的 `docker-compose`/`.env`（Tika 服務為外部自建），故每個部署環境都要自行確認此設定，不會由程式碼預設帶出正確值。
 
 ### 維護文件規則（避免 rebase 衝突與拓撲分歧）
 
@@ -96,16 +95,16 @@
 - `git status`、`git fetch upstream`、`git fetch origin`、`git log`、`git diff`（唯讀）
 - 查上游 PR 狀態（唯讀）：`gh pr view <PR編號> -R open-webui/open-webui --json state,baseRefName,mergedAt`
 - `main` 合併上游：`git merge upstream/main`（若有衝突，停下回報，見下方）
-- 依「分支堆疊表」對堆疊分支做 `git rebase`（`feat/single-active-session`、`feat/pdf-citation-source-panel`、`feat/tika4-rmeta-loader`）
-- 對 `fork/release` 的 `git reset --hard <堆疊最末端 tip>`（目前為 `feat/tika4-rmeta-loader`）
+- 依「分支堆疊表」對堆疊分支做 `git rebase`（`feat/single-active-session`）
+- 對 `fork/release` 的 `git reset --hard <堆疊最末端 tip>`（目前為 `feat/single-active-session`）
 
 **AI 必須停下、回報、等我確認後才能做：**
 - 解決任何 merge / rebase / cherry-pick 衝突（先說明衝突內容與建議，不要自行決定保留哪邊）
 - 任何 `git push`，特別是 `--force`
 - 對「分支堆疊表」以外的分支做 `reset --hard`
 - 修改 `docs/fork維護紀錄.md` 於 `main` 以外的任何分支
-- 把 `feat/exact-pdf-citation-source-panel` 的內容合併進 `main` 或其他分支
-- 刪除 `[PATCH-A]` / `[PATCH-B]` 標記的程式碼
+- 把非本 fork 自製的上游觀察分支內容合併進 `main` 或其他分支
+- 刪除 `[PATCH-A]` 標記的程式碼
 - 設定中沒寫到的破壞性操作
 
 **出錯時的復原：**
@@ -135,10 +134,7 @@
 | --- | --- | --- |
 | `main` | `git merge upstream/main` | `[成功 / 有衝突]` |
 | `feat/single-active-session` | `git rebase main feat/single-active-session` | `[成功 / 有衝突]` |
-| `feat/pdf-citation-source-panel` | `git rebase feat/single-active-session feat/pdf-citation-source-panel` | `[成功 / 有衝突]` |
-| `feat/tika4-rmeta-loader` | `git rebase feat/pdf-citation-source-panel feat/tika4-rmeta-loader` | `[成功 / 有衝突]` |
-| `fork/release` | `git reset --hard feat/tika4-rmeta-loader` | `[完成]` |
-| `feat/exact-pdf-citation-source-panel` | 上游已刪除，origin 殘留副本（僅觀察，不合併） | `[維持 / 已清除]` |
+| `fork/release` | `git reset --hard feat/single-active-session` | `[完成]` |
 
 > **rebase Patch A 之後、往下疊之前**：重新指向 `a1c0ffee5e55` 的 `down_revision`（見 A 區 Patch A 登記的 ⚠️ 說明）。跨版本同步時不做這步，`alembic upgrade head` 會因 multiple heads 失敗，且**不會有任何錯誤指向 Patch A**。
 > - 本次指向：`[上游新 head]`
@@ -152,8 +148,8 @@
 - [ ] `git log --oneline` 確認 `main` 已包含上游最新 commit
 - [ ] 本地建置或啟動測試通過
 - [ ] **Alembic 單一 head**：容器啟動 log 有 `Running upgrade <上游新head> -> a1c0ffee5e55`，且 `alembic_version` = `a1c0ffee5e55`
-- [ ] `[PATCH-A]` / `[PATCH-C]` 行內標記數量與同步前一致（`grep -ro '\[PATCH-A\]' backend/ src/ | wc -l`）
-- [ ] Patch A / B / C 功能實測正常（Patch B 無行內標記，靠功能實測把關）
+- [ ] `[PATCH-A]` 行內標記數量與同步前一致（`grep -ro '\[PATCH-A\]' backend/ src/ --exclude-dir=__pycache__ | wc -l`）
+- [ ] Patch A 功能實測正常
 
 > **rebase 乾淨 ≠ 正確。** 本次同步實際發生過：git 未報衝突卻靜默丟掉一個函式定義、留下孤兒呼叫。每次 rebase 後除了看衝突，還要驗
 > (a) 刪除的行是否全屬本 patch 該改的（`git diff <parent> <branch> | grep '^-'` 逐行看）；
@@ -162,16 +158,7 @@
 
 **5. PR / 分支狀態追蹤**
 
-| 項目 | 來源 | 狀態 | 後續動作 |
-| --- | --- | --- | --- |
-| Patch B | PR #25076 | `[上游未合併 / 已合併]` | `[繼續維護 / 上游合併後移除本 Patch]` |
-| `feat/exact-pdf-citation-source-panel` | 上游 WIP 分支 | `[仍無內容 / 上游已開始開發]` | `[繼續觀察 / 評估是否採用]` |
-
-> **偵測 Patch B 是否可移除**（兩關卡都成立才移除；移除屬破壞性，**須停下等確認**後依「D-2」執行）：
-> - 關卡一（PR 已合併）：`gh pr view 25076 -R open-webui/open-webui --json state,mergedAt` → `state` 為 `MERGED`。
-> - 關卡二（功能已進追蹤線 `upstream/main`）：本次 `git merge upstream/main` 後，`git cat-file -e main:src/lib/components/chat/SourcePanel.svelte` 成立（main 已含該功能檔）。
-> - 只到關卡一（PR 通常先進 `dev`）**先不移除**——否則下個上游發版前會憑空少掉此功能；等關卡二成立再處理。
-> - 移除前確認：`git diff main feat/pdf-citation-source-panel` 應僅剩無關差異；若上游 squash/改寫致仍有實質差異，先評估 Patch B 要保留或調整，再決定是否移除。
+（目前堆疊只剩 Patch A，無引用型 patch 需要追蹤 PR 狀態。若新增 Patch，依「D-1」登記後在此補上追蹤表。）
 
 **6. 結論**
 - 本次結果：`[順利 / 需後續處理]`
@@ -247,6 +234,61 @@
   - 下次同步前先看 `docker builder du`。本次快取僅命中 2 層，全量重建約 35–40 分鐘（`npm ci` 20 分、`apt-get` 16 分，皆為網路等待）。
   - 以 `USE_SLIM=true` 建置的映像**執行時**才抓 embedding 模型，會卡住啟動；測試時加 `-e RAG_EMBEDDING_ENGINE=ollama` 繞開。config 首次啟動即 seed 進 DB，換 env 需連 volume 一併清除才生效。
   - 評估刪除 origin 上的 `feat/exact-pdf-citation-source-panel` 殘留副本。
+
+---
+
+### `2026-09-14` — `跨版本同步 v0.11.0 → v0.11.3 + 移除 Patch B/C`
+
+**執行人 / AI:** Claude Code（Sonnet 5）
+**上游基準:** tag `v0.11.3` @ `2a960a59f`
+
+> 註：`upstream/main` 當時已在 `0a7c15832`（領先 v0.11.3 1 個非功能性 commit：CI 設定），**刻意只合併到 tag `v0.11.3`**，以對齊正式發版點。
+
+**1. 同步前檢查**
+- [x] `git status` 乾淨
+- [x] `git fetch upstream` / `origin` 完成
+- [x] `merge.ours.driver` = `true`
+- [x] 同步前建立回退點，已推 origin：
+  - `fork-v0.11.0-main` → `6510b15b8`
+  - `fork-v0.11.0-stack` → `943613976`（涵蓋 A/B/C，因 A、B 皆為 C 的祖先；Patch B、C 移除後這是唯一能回溯舊內容的地方）
+
+**2. 分支同步與拓撲異動**
+
+| 分支 | 結果 | 新 tip |
+| --- | --- | --- |
+| `main` | 合併乾淨（事前以 `git merge-tree --write-tree` 預檢，exit 0） | `5338a6dee` |
+| `feat/single-active-session` | 1 段衝突（`src/routes/auth/+page.svelte`，假衝突，兩邊相容），已處理 | `8bc97c9b9` |
+| `feat/pdf-citation-source-panel` / `feat/tika4-rmeta-loader` | **整支移除**（Patch B、C，依 SOP D-2），未 rebase 直接跳過 | 分支已刪除 |
+| `fork/release` | `reset --hard feat/single-active-session` | 同 Patch A tip |
+
+> Patch A 的 `down_revision` 已重指：`f0bd01a18a3d` → `d4c1a8e37b62`（commit `8bc97c9b9`，新上游 migration 鏈：`f0bd01a18a3d → 1ce6ade7d93b → 6d09d1bf1f23 → d4c1a8e37b62`）。
+
+**3. 衝突處理**
+
+*Patch A*
+- `src/routes/auth/+page.svelte`：上游 v0.11.3 新增 `state=logout` 判斷（`if ($user && !logout)`，供使用者主動登出時抑制自動導回/OAuth 自動導向），與 Patch A 原本只加在同位置的說明註解（`if ($user)` 條件式本身未改）重疊成衝突。兩邊語意互不衝突（一個管「主動登出」、一個管「被踢出」），保留上游新條件式＋Patch A 的 `[PATCH-A]` 註解，未刪任何一方邏輯。
+
+*Patch B / C*：無 rebase 衝突可言——整支移除，未嘗試 rebase。
+
+**4. 驗證**
+- [x] `[PATCH-A]` 行內標記數量：9 處 / 7 檔，與 v0.11.0 同步時一致（`--exclude-dir=__pycache__` 排除 bytecode 誤報）
+- [x] `git range-diff fork-v0.11.0-main..fork-v0.11.0-stack main..feat/single-active-session`：Patch A 自身 2 個功能 commit 內容與預期一致，無非預期變化
+- [ ] 前端建置 / Docker 實機測試（待補）
+- [ ] Alembic 單一 head 實測（待補：`Running upgrade d4c1a8e37b62 -> a1c0ffee5e55`）
+- [ ] **Tika 原生方案 smoke test**：設 `TIKA_SERVER_VERSION=4`，對 Tika 4.0 灌一份文件確認正確抽出全文（取代原 Patch C 的 A/B 對照測試）
+
+**5. PR / 分支狀態追蹤**
+
+| 項目 | 來源 | 狀態 | 後續動作 |
+| --- | --- | --- | --- |
+| Patch B | PR #25076 | 已於 2026-08-28 **CLOSED**（非合併），上游改走 `display_file` 工具機制 | **已整支移除**（見 A 區「已移除的 Patch」） |
+| Patch C | 上游 Tika 支援 | v0.11.3 已原生支援（`RAG.TIKA_SERVER_VERSION`），非 Patch C 的做法但解決同一問題 | **已整支移除**，改用上游原生方案；部署須設 `TIKA_SERVER_VERSION=4` |
+| `feat/exact-pdf-citation-source-panel` | 上游已刪除的觀察分支 | origin 殘留副本 `b711935dd`，與 merge-base 無差異 | 本次一併清除（見下方分支清理） |
+| `pr-25076`（未登記殘留分支） | 先前手動測試 PR #25076 cherry-pick 用 | 已確認為測試殘留 | 本次一併清除 |
+
+**6. 結論**
+- 本次結果：`[待驗證完成後填]`
+- 待辦：`[待驗證與分支清理完成後填]`
 
 ---
 
